@@ -42,18 +42,18 @@ app.post("/chatbot", async (req, res) => {
   const userMessage = req.body.message;
 
   try {
-    const chatCompletion = await openai.chatCompletion({
-      model: "meta-llama/llama-4-maverick:free",
-      messages: [
-        {
-          role: "user",
-          content: userMessage,
-        },
-      ],
-      max_tokens: 500,
-    });
+    const completion = await openai.chat.completions.create({
+    model: "deepseek/deepseek-v3-base:free",
+    messages: [
+      {
+        "role": "user",
+        "content": "What is the meaning of life?"
+      }
+    ],
+    
+  });
 
-    const botReply = chatCompletion.choices[0].message.content;
+    const botReply = Completion.choices[0].message.content;
     res.json({ reply: botReply });
   } catch (error) {
     console.error("Error in chatbot request:", error);
