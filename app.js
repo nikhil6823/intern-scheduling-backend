@@ -3,9 +3,10 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
+const { OpenAI } = require("openai");
 require("dotenv").config(); // Load environment variables
 
-const huggingFaceToken = process.env.HUGGING_FACE_TOKEN;
+const apiToken = process.env.OPENROUTER_API_KEY;
 
 const app = express();
 app.use(express.json());
@@ -31,17 +32,18 @@ const Schedule = require("./models/scheduleSchema");
 // Chatbot Route
 
 // Initialize OpenAI Client
-const { InferenceClient } = require("@huggingface/inference");
-const hfClient = new InferenceClient(huggingFaceToken);
+const openai = new OpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: apiToken,
+});
 
 // Updated Chatbot Route
 app.post("/chatbot", async (req, res) => {
   const userMessage = req.body.message;
 
   try {
-    const chatCompletion = await hfClient.chatCompletion({
-      provider: "fireworks-ai",
-      model: "deepseek-ai/DeepSeek-V3",
+    const chatCompletion = await openai.chatCompletion({
+      model: "nvidia/llama-3.1-nemotron-nano-8b-v1:free",
       messages: [
         {
           role: "user",
