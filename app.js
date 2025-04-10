@@ -34,7 +34,7 @@ const Schedule = require("./models/scheduleSchema");
 // Chatbot Route
 
 // Initialize OpenAI Client
-const openai = new OpenAI({
+const client = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: apiToken,
 });
@@ -44,8 +44,8 @@ app.post("/chatbot", async (req, res) => {
   const userMessage = req.body.message;
 
   try {
-    const completion = await openai.chat.completions.create({
-    model: "deepseek/deepseek-v3-base:free",
+    const completion = await client.chat.completions.create({
+    model: "nvidia/llama-3.1-nemotron-nano-8b-v1:free",
     messages: [
       {
         "role": "user",
