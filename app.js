@@ -3,7 +3,6 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
-const { OpenAI } = require("openai");
 require("dotenv").config(); // Load environment variables
 
 const huggingFaceToken = process.env.HUGGING_FACE_TOKEN;
