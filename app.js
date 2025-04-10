@@ -16,9 +16,7 @@ const port = process.env.PORT || 3000;
 app.use(
   cors({
     origin: "https://intern-scheduling.vercel.app",
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
+    headers: ["Content-Type", "Authorization"],
   })
 );
 mongoose
