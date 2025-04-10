@@ -32,19 +32,23 @@ const Schedule = require("./models/scheduleSchema");
 // Chatbot Route
 
 // Initialize OpenAI Client
-const client = new OpenAI({
-  baseURL: "https://router.huggingface.co/novita/v3/openai",
-  apiKey: huggingFaceToken, // Store API key in .env for security
-});
+const { InferenceClient } = require("@huggingface/inference");
+const hfClient = new InferenceClient(huggingFaceToken);
 
 // Updated Chatbot Route
 app.post("/chatbot", async (req, res) => {
   const userMessage = req.body.message;
 
   try {
-    const chatCompletion = await client.chat.completions.create({
-      model: "deepseek/deepseek-v3-0324",
-      messages: [{ role: "user", content: userMessage }],
+    const chatCompletion = await hfClient.chatCompletion({
+      provider: "fireworks-ai",
+      model: "deepseek-ai/DeepSeek-V3",
+      messages: [
+        {
+          role: "user",
+          content: userMessage,
+        },
+      ],
       max_tokens: 500,
     });
 
