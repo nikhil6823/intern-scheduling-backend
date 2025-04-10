@@ -53,7 +53,7 @@ app.post("/chatbot", async (req, res) => {
     
   });
 
-    const botReply = Completion.choices[0].message.content;
+    const botReply = completion.choices[0].message.content;
     res.json({ reply: botReply });
   } catch (error) {
     console.error("Error in chatbot request:", error);
