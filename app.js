@@ -49,7 +49,7 @@ app.post("/chatbot", async (req, res) => {
     messages: [
       {
         "role": "user",
-        "content": "What is the meaning of life?"
+        "content": userMessage
       }
     ],
     
