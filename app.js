@@ -45,7 +45,7 @@ app.post("/chatbot", async (req, res) => {
 
   try {
     const completion = await client.chat.completions.create({
-    model: "nvidia/llama-3.1-nemotron-nano-8b-v1:free",
+    model: "meta-llama/llama-4-maverick:free",
     messages: [
       {
         "role": "user",
