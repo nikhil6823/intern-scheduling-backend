@@ -45,7 +45,7 @@ app.post("/chatbot", async (req, res) => {
 
   try {
     const completion = await client.chat.completions.create({
-    model: "meta-llama/llama-4-maverick:free",
+    model: "deepseek/deepseek-chat-v3-0324",
     messages: [
       {
         "role": "user",
