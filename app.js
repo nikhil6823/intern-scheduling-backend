@@ -14,13 +14,11 @@ app.use(express.urlencoded({ extended: true }));
 const port = process.env.PORT || 3000;
 
 app.use(
-  cors({
-    origin: "https://intern-scheduling.vercel.app",
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  })
-);
+   cors({
+     origin: "https://intern-scheduling.vercel.app",
+     headers: ["Content-Type", "Authorization"],
+   })
+ );
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
