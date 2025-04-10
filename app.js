@@ -14,11 +14,13 @@ app.use(express.urlencoded({ extended: true }));
 const port = process.env.PORT || 3000;
 
 app.use(
-   cors({
-     origin: "https://intern-scheduling.vercel.app",
-     headers: ["Content-Type", "Authorization"],
-   })
- );
+  cors({
+    origin: "https://intern-scheduling.vercel.app",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
@@ -43,23 +45,21 @@ app.post("/chatbot", async (req, res) => {
 
   try {
     const completion = await openai.chat.completions.create({
-    model: "deepseek/deepseek-v3-base:free",
-    messages: [
-      {
-        "role": "user",
-        "content": "What is the meaning of life?"
-      }
-    ],
-    
-  });
+      model: "deepseek/deepseek-v3-base:free",
+      messages: [{ role: "user", content: userMessage }],
+      temperature: 0.7,
+    });
 
     const botReply = completion.choices[0].message.content;
     res.json({ reply: botReply });
   } catch (error) {
-    console.error("Error in chatbot request:", error);
-    res.status(500).json({ error: "Chatbot request failed" });
+    console.error("OpenRouter Error:", error?.response?.data || error.message);
+    res
+      .status(500)
+      .json({ error: "Chatbot request failed. Please try again later." });
   }
 });
+
 
 async function generateSchedules(departments, interns) {
   const schedules = [];
