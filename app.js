@@ -45,7 +45,7 @@ app.post("/chatbot", async (req, res) => {
 
   try {
     const completion = await client.chat.completions.create({
-    model: "deepseek/deepseek-chat-v3-0324:free",
+    model: "deepseek/deepseek-r1-0528-qwen3-8b:free",
     messages: [
       {
         "role": "user",
