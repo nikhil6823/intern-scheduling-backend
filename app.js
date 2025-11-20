@@ -35,7 +35,7 @@ const Schedule = require("./models/scheduleSchema");
 
 // Initialize OpenAI Client
 const client = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
+  baseURL: "https://openrouter.ai/api/v1/chat/completions",
   apiKey: apiToken,
 });
 
