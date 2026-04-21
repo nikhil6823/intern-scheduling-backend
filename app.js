@@ -44,7 +44,7 @@ const client = new OpenAI({
 });
 
 // Updated Chatbot Route
-app.get("/chatbot", async (req, res) => {
+app.post("/chatbot", async (req, res) => {
   try {
     const userMessage = req.body.message;
 
@@ -52,7 +52,11 @@ app.get("/chatbot", async (req, res) => {
       return res.status(400).json({ error: "Message required" });
     }
 
-    const completion = await client.chat.completions.create({
+    // Set headers for streaming response
+    res.setHeader("Content-Type", "text/plain");
+    res.setHeader("Transfer-Encoding", "chunked");
+
+    const stream = await openrouter.chat.send({
       model: "nvidia/nemotron-3-super-120b-a12b:free",
       messages: [
         {
@@ -60,18 +64,32 @@ app.get("/chatbot", async (req, res) => {
           content: userMessage,
         },
       ],
+      stream: true,
     });
 
-    const botReply = completion.choices?.[0]?.message?.content || "No response";
+    let fullResponse = "";
 
-    res.json({ reply: botReply });
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content;
+
+      if (content) {
+        fullResponse += content;
+        res.write(content); // 🔥 send chunk to frontend
+      }
+
+      // Final chunk → reasoning tokens
+      if (chunk.usage) {
+        console.log("Reasoning tokens:", chunk.usage.reasoningTokens);
+      }
+    }
+
+    res.end(); // end streaming
 
   } catch (error) {
-    console.error("🔥 Chatbot ERROR FULL:", error.response?.data || error.message);
+    console.error("🔥 Chatbot ERROR:", error.message);
     res.status(500).json({ error: "Chatbot request failed" });
   }
 });
-
 async function generateSchedules(departments, interns) {
   const schedules = [];
 
