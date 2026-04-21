@@ -3,15 +3,17 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
-const { OpenAI } = require("openai");
-require("dotenv").config(); // Load environment variables
+require("dotenv").config();
 
-const apiToken = process.env.OPENROUTER_API_KEY;
+// ✅ OpenRouter SDK
+const { OpenRouter } = require("@openrouter/sdk");
 
 const app = express();
+const port = process.env.PORT || 3000;
+
+// ===== Middleware =====
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-const port = process.env.PORT || 3000;
 
 app.use(
   cors({
@@ -21,29 +23,25 @@ app.use(
     credentials: true,
   })
 );
+
+// ===== DB Connection =====
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.log(err));
 
+// ===== Models =====
 const Intern = require("./models/internModel");
 const Leave = require("./models/leaveSchema");
 const Department = require("./models/departmentSchema");
 const Schedule = require("./models/scheduleSchema");
 
-// Chatbot Route
-
-// Initialize OpenAI Client
-const client = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
+// ===== OpenRouter Init =====
+const openrouter = new OpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
-  defaultHeaders: {
-    "HTTP-Referer": "https://intern-scheduling.vercel.app",
-    "X-Title": "Intern Scheduling App",
-  },
 });
 
-// Updated Chatbot Route
+// ===== CHATBOT ROUTE (FIXED) =====
 app.post("/chatbot", async (req, res) => {
   try {
     const userMessage = req.body.message;
@@ -52,11 +50,7 @@ app.post("/chatbot", async (req, res) => {
       return res.status(400).json({ error: "Message required" });
     }
 
-    // Set headers for streaming response
-    res.setHeader("Content-Type", "text/plain");
-    res.setHeader("Transfer-Encoding", "chunked");
-
-    const stream = await openrouter.chat.send({
+    const completion = await openrouter.chat.send({
       model: "nvidia/nemotron-3-super-120b-a12b:free",
       messages: [
         {
@@ -64,58 +58,38 @@ app.post("/chatbot", async (req, res) => {
           content: userMessage,
         },
       ],
-      stream: true,
     });
 
-    let fullResponse = "";
+    const reply =
+      completion.choices?.[0]?.message?.content || "No response";
 
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content;
-
-      if (content) {
-        fullResponse += content;
-        res.write(content); // 🔥 send chunk to frontend
-      }
-
-      // Final chunk → reasoning tokens
-      if (chunk.usage) {
-        console.log("Reasoning tokens:", chunk.usage.reasoningTokens);
-      }
-    }
-
-    res.end(); // end streaming
+    res.json({ reply });
 
   } catch (error) {
-    console.error("🔥 Chatbot ERROR:", error.message);
+    console.error("🔥 Chatbot ERROR:", error);
     res.status(500).json({ error: "Chatbot request failed" });
   }
 });
+
+// ===== Schedule Generator =====
 async function generateSchedules(departments, interns) {
   const schedules = [];
-
   let currentDepartments = [...departments];
 
   for (const intern of interns) {
     let weekCounter = 1;
     const internSchedule = [];
 
-    // Make a copy to manipulate
-
     for (const department of currentDepartments) {
-      const weeksInDepartment = department.week;
-
-      for (let i = 0; i < weeksInDepartment; i++) {
+      for (let i = 0; i < department.week; i++) {
         internSchedule.push({
           internId: intern._id,
           departmentId: department._id,
           week: weekCounter++,
         });
       }
-
-      // Rotate departments for the next intern
-
-      console.log(currentDepartments);
     }
+
     currentDepartments.push(currentDepartments.shift());
     schedules.push(internSchedule);
   }
@@ -123,6 +97,7 @@ async function generateSchedules(departments, interns) {
   return schedules;
 }
 
+// ===== Auth Middleware =====
 const verifyToken = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
 
@@ -140,16 +115,17 @@ const verifyToken = (req, res, next) => {
   });
 };
 
+// ===== Auth Routes =====
 app.post("/register", async (req, res) => {
   try {
     const existingUser = await Intern.findOne({
       $or: [{ username: req.body.username }, { email: req.body.email }],
     });
+
     if (existingUser) {
-      return res
-        .status(400)
-        .json({ message: "Username or email already exists." });
+      return res.status(400).json({ message: "User already exists" });
     }
+
     const hashedPassword = await bcrypt.hash(req.body.password, 10);
 
     const newIntern = new Intern({
@@ -160,375 +136,125 @@ app.post("/register", async (req, res) => {
       password: hashedPassword,
       domain: "",
     });
+
     await newIntern.save();
-    res.json({ message: "Intern registration successful." });
+    res.json({ message: "Registration successful" });
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ message: "Server error" });
   }
 });
 
 app.post("/login", async (req, res) => {
-  console.log(req.body);
   try {
     const intern = await Intern.findOne({ username: req.body.username });
-    console.log(intern);
-    if (
-      !intern ||
-      !(await bcrypt.compare(req.body.password, intern.password))
-    ) {
-      return res.status(401).json({ message: "Invalid username or password." });
+
+    if (!intern || !(await bcrypt.compare(req.body.password, intern.password))) {
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
     const token = jwt.sign({ userId: intern._id }, "your-secret-key", {
       expiresIn: "1h",
     });
-    res.json({ status: "ok", token });
+
+    res.json({ token });
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ message: "Server error" });
   }
 });
 
+// ===== Intern APIs =====
 app.get("/intern-details", verifyToken, async (req, res) => {
-  const userId = req.userId;
-  const User = await Intern.findOne({ _id: userId });
-  console.log(User);
-
-  res.json({ User });
+  const user = await Intern.findById(req.userId);
+  res.json({ user });
 });
 
 app.get("/interns", async (req, res) => {
-  try {
-    const interns = await Intern.find();
-    res.json(interns);
-  } catch (error) {
-    console.error("Error fetching interns:", error);
-    res.status(500).send("Internal Server Error");
-  }
+  const interns = await Intern.find();
+  res.json(interns);
 });
 
 app.put("/interns/update", async (req, res) => {
-  try {
-    const { name, newDomain } = req.body;
+  const updatedIntern = await Intern.findOneAndUpdate(
+    { username: req.body.name },
+    { domain: req.body.newDomain },
+    { new: true }
+  );
 
-    // Update the intern's domain using findByIdAndUpdate
-    const updatedIntern = await Intern.findOneAndUpdate(
-      { username: name },
-      { $set: { domain: newDomain } },
-      { new: true } // Returns the updated document
-    );
-
-    if (!updatedIntern) {
-      return res
-        .status(404)
-        .json({ message: "Intern not found for the given name." });
-    }
-
-    res.json({ message: "Intern domain updated successfully.", updatedIntern });
-  } catch (error) {
-    console.error("Error updating intern domain:", error);
-    res.status(500).send("Internal Server Error");
-  }
+  res.json(updatedIntern);
 });
 
+// ===== Leave APIs =====
 app.post("/intern/leave-request", verifyToken, async (req, res) => {
-  const userId = req.userId;
+  const intern = await Intern.findById(req.userId);
 
-  const { reason, startDate, endDate, nominatedIntern } = req.body;
-  if (!userId || !startDate || !endDate || !reason || !nominatedIntern) {
-    return res
-      .status(400)
-      .json({ success: false, message: "Missing required parameters" });
-  }
+  const leave = new Leave({
+    internName: intern.username,
+    ...req.body,
+  });
 
-  try {
-    const intern = await Intern.findById(userId);
-    if (!intern) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Intern not found" });
-    }
-    const newLeave = new Leave({
-      internName: intern.username,
-      reason,
-      startDate,
-      endDate,
-      nominatedIntern,
-    });
-    await newLeave.save();
+  await leave.save();
+  intern.leaveRequests.push(leave);
+  await intern.save();
 
-    intern.leaveRequests.push(newLeave);
-
-    await intern.save();
-    res.json({
-      success: true,
-      message: "Leave request submitted successfully",
-    });
-  } catch (error) {
-    console.error("Error submitting leave request:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-});
-
-app.get("/intern/leave-requests", verifyToken, async (req, res) => {
-  const userId = req.userId;
-
-  if (!userId) {
-    return res.status(400).json({ success: false, message: "Missing user ID" });
-  }
-
-  try {
-    const intern = await Intern.findById(userId);
-    if (!intern) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Intern not found" });
-    }
-
-    const leaveRequests = await Leave.find({
-      nominatedIntern: intern.username,
-    });
-    res.json({ success: true, leaveRequests });
-  } catch (error) {
-    console.error("Error fetching leave requests:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
+  res.json({ success: true });
 });
 
 app.get("/user/leaves", verifyToken, async (req, res) => {
-  const userId = req.userId;
-  try {
-    const intern = await Intern.findById(userId);
-    if (!intern) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Intern not found" });
-    }
-
-    const username = intern.username;
-    const leaves = await Leave.find({ internName: username });
-
-    res.json({ success: true, leaves });
-  } catch (error) {
-    console.error("Error fetching leaves:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
+  const intern = await Intern.findById(req.userId);
+  const leaves = await Leave.find({ internName: intern.username });
+  res.json({ leaves });
 });
 
-app.put("/leave-requests/:id/approve", async (req, res) => {
-  const leaveRequestId = req.params.id;
-
-  try {
-    const leaveRequest = await Leave.findByIdAndUpdate(
-      leaveRequestId,
-      { internStatus: "approved" },
-      { new: true }
-    );
-
-    if (!leaveRequest) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Leave request not found" });
-    }
-
-    res.json({
-      success: true,
-      message: "Leave request approved successfully",
-      leaveRequest,
-    });
-  } catch (error) {
-    console.error("Error approving leave request:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-});
-
-app.put("/leave-requests/:id/reject", async (req, res) => {
-  const leaveRequestId = req.params.id;
-
-  try {
-    const leaveRequest = await Leave.findByIdAndUpdate(
-      leaveRequestId,
-      { internStatus: "rejected" },
-      { new: true }
-    );
-
-    if (!leaveRequest) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Leave request not found" });
-    }
-
-    res.json({
-      success: true,
-      message: "Leave request rejected successfully",
-      leaveRequest,
-    });
-  } catch (error) {
-    console.error("Error rejecting leave request:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-});
-
-app.get("/admin/leaves", async (req, res) => {
-  try {
-    const leaves = await Leave.find();
-    res.json({ success: true, leaves });
-  } catch (error) {
-    console.error("Error fetching leaves:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-});
-
-app.put("/admin/leave-requests/:id/approve", async (req, res) => {
-  const leaveRequestId = req.params.id;
-
-  try {
-    const leaveRequest = await Leave.findByIdAndUpdate(
-      leaveRequestId,
-      { adminStatus: "approved" },
-      { new: true }
-    );
-
-    if (!leaveRequest) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Leave request not found" });
-    }
-
-    res.json({
-      success: true,
-      message: "Leave request approved successfully",
-      leaveRequest,
-    });
-  } catch (error) {
-    console.error("Error approving leave request:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-});
-
-app.put("/admin/leave-requests/:id/reject", async (req, res) => {
-  const leaveRequestId = req.params.id;
-
-  try {
-    const leaveRequest = await Leave.findByIdAndUpdate(
-      leaveRequestId,
-      { adminStatus: "rejected" },
-      { new: true }
-    );
-
-    if (!leaveRequest) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Leave request not found" });
-    }
-
-    res.json({
-      success: true,
-      message: "Leave request rejected successfully",
-      leaveRequest,
-    });
-  } catch (error) {
-    console.error("Error rejecting leave request:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-});
-
+// ===== Department =====
 app.post("/departments", async (req, res) => {
-  const { name, week } = req.body;
-
-  try {
-    const existingDepartment = await Department.findOne({ name });
-    if (existingDepartment) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Department already exists" });
-    }
-
-    const department = new Department({ name, week });
-    await department.save();
-
-    res.status(201).json({
-      success: true,
-      message: "Department added successfully",
-      department,
-    });
-  } catch (error) {
-    console.error("Error adding department:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
+  const department = new Department(req.body);
+  await department.save();
+  res.json(department);
 });
 
 app.get("/get-departments", async (req, res) => {
-  try {
-    const departments = await Department.find();
-    res.json({ success: true, departments });
-  } catch (error) {
-    console.error("Error fetching departments:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
+  const departments = await Department.find();
+  res.json({ departments });
 });
 
+// ===== Schedule =====
 app.post("/assign-departments", async (req, res) => {
-  try {
-    await Schedule.deleteMany();
-    const departments = await Department.find();
-    const interns = await Intern.find();
-    const weeklySchedules = await generateSchedules(departments, interns);
+  await Schedule.deleteMany();
 
-    const flatSchedules = weeklySchedules.reduce(
-      (acc, val) => acc.concat(val),
-      []
-    );
+  const departments = await Department.find();
+  const interns = await Intern.find();
 
-    await Schedule.insertMany(flatSchedules);
+  const schedules = await generateSchedules(departments, interns);
+  const flat = schedules.flat();
 
-    res.json({
-      success: true,
-      message: "Departments assigned to interns successfully for 52 weeks",
-    });
-  } catch (error) {
-    console.error("Error assigning departments to interns:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
+  await Schedule.insertMany(flat);
+
+  res.json({ success: true });
 });
-app.get("/schedules", async (req, res) => {
-  try {
-    const schedules = await Schedule.find()
-      .populate({
-        path: "departmentId",
-        select: "name",
-      })
-      .populate({
-        path: "internId",
-        select: "username",
-      });
 
-    res.json({ success: true, schedules });
-  } catch (error) {
-    console.error("Error fetching schedules:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
+app.get("/schedules", async (req, res) => {
+  const schedules = await Schedule.find()
+    .populate("departmentId", "name")
+    .populate("internId", "username");
+
+  res.json({ schedules });
 });
 
 app.get("/user/schedules", verifyToken, async (req, res) => {
-  try {
-    const userId = req.userId;
-    const schedules = await Schedule.find({ internId: userId }).populate({
-      path: "departmentId",
-      select: "name",
-    });
-    res.json({ success: true, schedules });
-  } catch (error) {
-    console.error("Error fetching schedules:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
+  const schedules = await Schedule.find({ internId: req.userId })
+    .populate("departmentId", "name");
+
+  res.json({ schedules });
 });
 
+// ===== Root =====
 app.get("/", (req, res) => {
-  res.send("backend is running");
+  res.send("Backend running ✅");
 });
 
+// ===== Server =====
 app.listen(port, () => {
-  console.log(`Server is running on port: ${port}`);
+  console.log(`Server running on port ${port}`);
 });
