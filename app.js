@@ -44,7 +44,7 @@ const client = new OpenAI({
 });
 
 // Updated Chatbot Route
-app.post("/chatbot", async (req, res) => {
+app.get("/chatbot", async (req, res) => {
   try {
     const userMessage = req.body.message;
 
