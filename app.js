@@ -35,30 +35,39 @@ const Schedule = require("./models/scheduleSchema");
 
 // Initialize OpenAI Client
 const client = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1/chat/completions",
-  apiKey: apiToken,
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+  defaultHeaders: {
+    "HTTP-Referer": "https://intern-scheduling.vercel.app",
+    "X-Title": "Intern Scheduling App",
+  },
 });
 
 // Updated Chatbot Route
 app.post("/chatbot", async (req, res) => {
-  const userMessage = req.body.message;
-
   try {
-    const completion = await client.chat.completions.create({
-    model: "deepseek/deepseek-r1-0528-qwen3-8b:free",
-    messages: [
-      {
-        "role": "user",
-        "content": userMessage
-      }
-    ],
-    
-  });
+    const userMessage = req.body.message;
 
-    const botReply = completion.choices[0].message.content;
+    if (!userMessage) {
+      return res.status(400).json({ error: "Message required" });
+    }
+
+    const completion = await client.chat.completions.create({
+      model: "deepseek/deepseek-r1-0528-qwen3-8b:free",
+      messages: [
+        {
+          role: "user",
+          content: userMessage,
+        },
+      ],
+    });
+
+    const botReply = completion.choices?.[0]?.message?.content || "No response";
+
     res.json({ reply: botReply });
+
   } catch (error) {
-    console.error("Error in chatbot request:", error);
+    console.error("🔥 Chatbot ERROR FULL:", error.response?.data || error.message);
     res.status(500).json({ error: "Chatbot request failed" });
   }
 });
