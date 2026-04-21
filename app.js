@@ -53,7 +53,7 @@ app.get("/chatbot", async (req, res) => {
     }
 
     const completion = await client.chat.completions.create({
-      model: "deepseek/deepseek-r1-0528-qwen3-8b:free",
+      model: "nvidia/nemotron-3-super-120b-a12b:free",
       messages: [
         {
           role: "user",
